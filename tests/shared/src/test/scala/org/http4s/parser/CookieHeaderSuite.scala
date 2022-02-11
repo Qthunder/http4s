@@ -49,14 +49,13 @@ class CookieHeaderSuite extends munit.FunSuite {
   test("Cookie parseWithWarnings should parse valid headers and return errors for failures") {
     val actual = parseWithWarnings("""key1=value1; key2={"aField":{}}""")
     assertEquals(
-      actual.right.map(_.values),
-      NonEmptyList.one(RequestCookie("key1", "value1")).some,
-    )
-    assertEquals(
-      actual.left,
-      NonEmptyList
-        .one(ParseFailure("Invalid Cookie header", "Error(6,NonEmptyList(EndOfString(6,18)))"))
-        .some,
+      actual,
+      Ior.Both(
+        NonEmptyList.one(
+          ParseFailure("Invalid Cookie header", "Error(6,NonEmptyList(EndOfString(6,18)))")
+        ),
+        Cookie(NonEmptyList.one(RequestCookie("key1", "value1"))),
+      ),
     )
   }
 }

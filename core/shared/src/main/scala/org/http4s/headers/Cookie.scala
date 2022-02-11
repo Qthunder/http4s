@@ -17,9 +17,10 @@
 package org.http4s
 package headers
 
-import cats.syntax.all._
-import cats.data.{Ior, NonEmptyList}
+import cats.data.Ior
+import cats.data.NonEmptyList
 import cats.parse.Parser
+import cats.syntax.all._
 import org.http4s.util.Renderable
 import org.http4s.util.Writer
 import org.typelevel.ci._
@@ -31,22 +32,26 @@ object Cookie {
   private def parseCookie(s: String): ParseResult[Cookie] =
     ParseResult.fromParser(parser, "Invalid Cookie header")(s)
 
-  def parseWithWarnings(s: String): Ior[NonEmptyList[ParseFailure], Cookie] = {
-    val (errors, cookies) = s
-      .split("; |;")
-      .toList
-      .filterNot(_.isEmpty)
-      .map(parseCookie)
-      .partitionEither(identity)
-
-    val oneFailure: ParseFailure = ParseFailure(
-      "Empty Cookie header",
-      s"No cookies to be parsed",
-    )
-    Ior
-      .fromOptions(NonEmptyList.fromList(errors), cookies.combineAllOption)
-      .getOrElse(Ior.left(NonEmptyList.one(oneFailure)))
-  }
+  def parseWithWarnings(s: String): Ior[NonEmptyList[ParseFailure], Cookie] =
+    parser2
+      .parseAll(s)
+      .map(
+        _.nonEmptyPartition(identity)
+          .leftMap(_.map(invalidCookie => ParseFailure("Invalid Cookie", invalidCookie.value)))
+      )
+      .fold(
+        error =>
+          Ior.left(
+            NonEmptyList.one(
+              ParseFailure(
+                "Invalid Cookie Header",
+                s"Failed to parse `$s` at offset ${error.failedAtOffset}",
+              )
+            )
+          ),
+        identity,
+      )
+      .map(Cookie(_))
 
   def parse(s: String): Either[ParseFailure, Cookie] = {
     def oneFailure(errors: NonEmptyList[ParseFailure]) = ParseFailure(
@@ -75,6 +80,26 @@ object Cookie {
 
   implicit val headerSemigroupInstance: cats.Semigroup[Cookie] =
     (a, b) => Cookie(a.values.concatNel(b.values))
+
+  case class InvalidCookie(value: String) extends AnyVal
+  private[http4s] val parser2: Parser[NonEmptyList[Either[InvalidCookie, RequestCookie]]] = {
+    import Parser.{char, string}
+
+    val cookieReadErrorParser = Parser.charsWhile(_ != ';').map(InvalidCookie)
+    val requestCookieOrErrorParser: Parser[Either[InvalidCookie, RequestCookie]] =
+      RequestCookie.parser.eitherOr(cookieReadErrorParser)
+
+    /* cookie-string = cookie-pair *( ";" SP cookie-pair ) */
+    val cookieString =
+      (requestCookieOrErrorParser ~ (string("; ") *> requestCookieOrErrorParser).rep0).map {
+        case (head, tail) =>
+          NonEmptyList(head, tail)
+      }
+
+    /* We also see trailing semi-colons in the wild, and grudgingly tolerate them
+     * here. */
+    cookieString <* char(';').?
+  }
 }
 
 final case class Cookie(values: NonEmptyList[RequestCookie])
