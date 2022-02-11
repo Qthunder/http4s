@@ -85,7 +85,7 @@ object Cookie {
   private[http4s] val parser2: Parser[NonEmptyList[Either[InvalidCookie, RequestCookie]]] = {
     import Parser.{char, string}
 
-    val cookieReadErrorParser = Parser.charsWhile(_ != ';').map(InvalidCookie)
+    val cookieReadErrorParser = Parser.string(Parser.anyChar).map(InvalidCookie)
     val requestCookieOrErrorParser: Parser[Either[InvalidCookie, RequestCookie]] =
       RequestCookie.parser.eitherOr(cookieReadErrorParser)
 
