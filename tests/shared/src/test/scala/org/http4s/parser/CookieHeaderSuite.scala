@@ -23,9 +23,9 @@ import org.http4s.headers.Cookie
 
 class CookieHeaderSuite extends munit.FunSuite {
   def parse(value: String): Cookie =
-    headers.Cookie.parse(value).valueOr(throw _)
+    Header[Cookie].parse(value).valueOr(throw _)
   def parseWithWarnings(value: String): Ior[NonEmptyList[ParseFailure], Cookie] =
-    headers.Cookie.parseWithWarnings(value)
+    Header[Cookie].parseWithWarnings(value)
 
   val cookiestr = "key1=value1; key2=\"value2\""
   val cookiestrSemicolon: String = cookiestr + ";"
